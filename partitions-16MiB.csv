@@ -1,0 +1,16 @@
+# ESP-IDF Partition Table
+# 16 MB flash (ESP32-S3-WROOM-1-N16R8)
+#
+# 迁移说明（从 AI-Safety-Inspection 移植 LCD 模块后调整）：
+#   factory 1.9MB -> 4MB : 中文全量字库 ui_font_cn_common_16.c（约 2.7MB 源码
+#                          生成物）必须装进 app 分区，原 0x1F0000 装不下
+#   vfs     10MB -> 7.9MB : 让出 2.1MB 给 factory；当前代码没有任何
+#                          esp_vfs_fat 引用，vfs 留着是为后续数据落盘
+#   storage 不变          : SPIFFS 4MB
+#
+# Name,     Type, SubType,  Offset,    Size,      Flags
+nvs,        data, nvs,      0x9000,    0x6000,
+phy_init,   data, phy,      0xf000,    0x1000,
+factory,    app,  factory,  0x10000,   0x400000,
+vfs,        data, fat,      0x410000,  0x7F0000,
+storage,    data, spiffs,   0xC00000,  0x400000,

@@ -1,0 +1,27 @@
+{
+  "idf.currentSetup": "/home/violet/esp/esp-idf",
+  "idf.buildPath": "${workspaceFolder}/build",
+  "idf.customExtraVars": {
+    "IDF_PATH": "/home/violet/esp/esp-idf",
+    "IDF_TOOLS_PATH": "/home/violet/.espressif",
+    "IDF_PYTHON_ENV_PATH": "/home/violet/.espressif/python_env/idf5.4_py3.10_env",
+    "IDF_TARGET": "esp32s3"
+  },
+  "idf.gitPath": "/usr/bin/git",
+  "idf.openOcdConfigs": [
+    "board/esp32s3-builtin.cfg"
+  ],
+  "idf.flashType": "UART",
+  "terminal.integrated.profiles.linux": {
+    "ESP-IDF 5.4": {
+      "path": "/bin/bash",
+      "args": [
+        "--rcfile",
+        "${workspaceFolder}/esp-idf-env.sh",
+        "-i"
+      ]
+    }
+  },
+  "terminal.integrated.defaultProfile.linux": "ESP-IDF 5.4",
+  "idf.port": "/dev/ttyUSB0"
+}
