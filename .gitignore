@@ -1,0 +1,37 @@
+# ---- ESP-IDF ----
+build/
+sdkconfig
+sdkconfig.defaults
+managed_components/
+
+# ---- 本地私有配置 / 密钥 ----
+HANDOFF.md
+Project_Design.md
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ---- IDE ----
+.vscode/
+.idea/
+*.swp
+
+# ---- 编译产物 ----
+*.bin
+*.elf
+*.map
+*.hex
+*.uf2
+
+# ---- 工具/会话产物 ----
+.zcode/
+__pycache__/
+*.pyc
+.workbuddy
+# ---- 系统 ----
+.DS_Store
+Thumbs.db

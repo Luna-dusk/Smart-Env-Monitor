@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>EnvDesk 仪表盘 · 240×320 布局基准</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/montserrat@5.0.0/index.css">
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   这是 LVGL 的布局基准稿，不是普通网页。
+
+   坐标与 components/BSP/LCD/screen_home.c 一一对应，
+   并且由 ui/layout_check.py 做过几何校验（无越界、无重叠）。
+   改这里的坐标，必须同时改 layout_check.py 和 screen_home.c。
+
+   三条规则保证 HTML 与 LVGL 一致：
+   1) 坐标是像素绝对值，1px = 1 个物理像素
+   2) 中文 line-height 固定 31px —— ui_font_cn_common_16 的实测行高，
+      不是 16px 字号。不手动设就会比 LVGL 里紧凑
+   3) 玻璃卡不用 backdrop-filter（LVGL 没有真模糊），
+      只靠「半透明白底 + 竖向渐变 + 1px 亮边 + 浅阴影」四件套
+
+   垂直预算（合计 320）：
+     状态栏  0~ 20    时间 16~ 68    日期 68~ 99
+     温湿度 103~145   空气 149~235   天气 239~282   底栏 286~320
+   ═══════════════════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0a0c;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 40px 24px;
+  font-family: 'Montserrat', 'Century Gothic', system-ui, sans-serif;
+  color: #8a8f98;
+}
+
+.hint { font-size: 12px; letter-spacing: .3px; text-align: center; line-height: 1.7; }
+.hint b { color: #cfd4dc; font-weight: 500; }
+
+.screen {
+  position: relative;
+  width: 240px;
+  height: 320px;
+  overflow: hidden;
+  border-radius: 8px;
+  transform: scale(2.4);
+  transform-origin: center center;
+  margin: 228px 0;
+  background: linear-gradient(180deg, #1d324e 0%, #13253c 52%, #0d1b2d 100%);
+  isolation: isolate;
+}
+
+/* ── 三团柔光 ── */
+.glow { position: absolute; border-radius: 50%; pointer-events: none; }
+.glow-a { left: -30px; top: -50px;  width: 130px; height: 130px;
+  background: radial-gradient(circle, rgba(58,124,165,.62) 0%, rgba(58,124,165,0) 68%); }
+.glow-b { left: 160px; top: -30px;  width: 110px; height: 110px;
+  background: radial-gradient(circle, rgba(46,139,154,.58) 0%, rgba(46,139,154,0) 68%); }
+.glow-c { left: 140px; top: 200px;  width: 120px; height: 120px;
+  background: radial-gradient(circle, rgba(39,75,115,.72) 0%, rgba(39,75,115,0) 68%); }
+
+/* ── 玻璃卡：bg_opa 26% + 渐变到 #dfe9f2 + 白边 28% + 浅阴影 ── */
+.card {
+  position: absolute;
+  left: 12px;
+  width: 216px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,.26) 0%, rgba(223,233,242,.26) 100%);
+  border: 1px solid rgba(255,255,255,.28);
+  box-shadow: 0 2px 6px rgba(0,0,0,.22);
+}
+
+/* ── 字体：中文 16px/行高31，数字走 Montserrat ── */
+.cn    { font-size: 16px; line-height: 31px; color: #fff; white-space: nowrap; }
+.dim   { color: #b9c9da; }
+.xs    { font-size: 12px; line-height: 14px; color: #b9c9da; white-space: nowrap; }
+.n20   { font-size: 20px; line-height: 23px; color: #fff; font-variant-numeric: tabular-nums; }
+.n24   { font-size: 24px; line-height: 27px; color: #fff; font-variant-numeric: tabular-nums; }
+.n48   { font-size: 48px; line-height: 52px; color: #fff; font-variant-numeric: tabular-nums; }
+
+/* 单行卡内统一垂直居中（等价 LVGL 的 LV_ALIGN_LEFT_MID） */
+.mid { position: absolute; top: 50%; transform: translateY(-50%); }
+.abs { position: absolute; }
+
+.bar    { position: absolute; left: 0; top: 0;   width: 240px; height: 20px; }
+.time   { position: absolute; left: 0; top: 16px; width: 240px; text-align: center; }
+.date   { position: absolute; left: 0; top: 68px; width: 240px; text-align: center; }
+
+.c-temp { top: 103px; height: 42px; }
+.c-air  { top: 149px; height: 86px; }
+.c-wx   { top: 239px; height: 43px; }
+.c-bar  { top: 286px; height: 34px; }
+
+.divider { position: absolute; background: rgba(255,255,255,.18); }
+
+.seg { position: absolute; width: 10px; height: 8px; border-radius: 3px; background: rgba(255,255,255,.18); }
+.seg.on { background: #ffb648; }
+
+.badge { position: absolute; width: 22px; height: 16px; border-radius: 8px; background: #1f6f4a;
+  display: flex; align-items: center; justify-content: center; }
+.badge span { font-size: 11px; line-height: 1; color: #4cc38a; letter-spacing: .5px; }
+
+.grid { position: absolute; inset: 0; pointer-events: none; display: none; }
+.grid.on { display: block; }
+.grid .h { position: absolute; left: 0; width: 240px; height: 1px; background: rgba(255,80,80,.55); }
+.grid .l { position: absolute; top: 0; height: 320px; width: 1px; background: rgba(80,255,140,.35); }
+.grid .tag { position: absolute; font-size: 8px; color: #ff8b8b; background: rgba(0,0,0,.5); padding: 0 2px; }
+</style>
+</head>
+<body>
+
+<div class="screen" id="screen">
+
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="glow glow-c"></div>
+
+  <!-- ═══ 状态栏 0~20：TOP_LEFT / TOP_MID / TOP_RIGHT ═══ -->
+  <div class="bar">
+    <svg style="position:absolute;right:31px;top:3px" width="15" height="14" viewBox="0 0 24 24" fill="none"
+         stroke="#ffffff" stroke-width="2.2" stroke-linecap="round">
+      <path d="M2.5 8.5a17 17 0 0 1 19 0"/>
+      <path d="M6 12.5a12 12 0 0 1 12 0"/>
+      <path d="M9.5 16.5a7 7 0 0 1 5 0"/>
+      <circle cx="12" cy="20" r="1.2" fill="#ffffff" stroke="none"/>
+    </svg>
+
+    <svg style="position:absolute;left:113px;top:2px" width="14" height="15" viewBox="0 0 24 24"
+         fill="#e8c76a" stroke="none">
+      <path d="M12 2a6 6 0 0 0-6 6v5l-2 3h16l-2-3V8a6 6 0 0 0-6-6z"/>
+      <circle cx="12" cy="20" r="2"/>
+    </svg>
+    <div style="position:absolute;left:123px;top:2px;width:4px;height:4px;border-radius:50%;background:#ff8a3d"></div>
+
+    <svg style="position:absolute;right:8px;top:5px" width="17" height="12" viewBox="0 0 26 14"
+         fill="none" stroke="#4cc38a" stroke-width="1.6">
+      <rect x="1" y="1.5" width="20" height="11" rx="3"/>
+      <rect x="3.5" y="4" width="12" height="6" rx="1.5" fill="#4cc38a" stroke="none"/>
+      <rect x="22.5" y="5" width="2.5" height="4" rx="1" fill="#4cc38a" stroke="none"/>
+    </svg>
+  </div>
+
+  <!-- ═══ 时钟：时间 16~68，日期 68~99 ═══ -->
+  <div class="time n48">22:22</div>
+  <div class="date cn">2026-11-18 星期三</div>
+
+  <!-- ═══ 温湿度卡 103~145 (42) ═══ -->
+  <div class="card c-temp">
+    <!-- 温度计：球心 y=25（卡中线 21 偏下 4px，折中位置） -->
+    <div style="position:absolute;left:7px;top:7px;width:6px;height:15px;border-radius:3px;background:#ff8a3d"></div>
+    <div style="position:absolute;left:5px;top:20px;width:10px;height:10px;border-radius:50%;background:#ff8a3d"></div>
+
+    <div class="mid n24" style="left:18px">25</div>
+    <!-- °C 整体 16px，和右侧 18~27°C 完全同一套排版 -->
+    <div class="mid cn" style="left:51px">°C</div>
+    <div class="mid cn dim" style="left:74px">温度</div>
+
+    <div class="divider" style="left:106px;top:5px;width:1px;height:31px"></div>
+
+    <svg style="position:absolute;left:108px;top:13px" width="12" height="16" viewBox="0 0 24 32"
+         fill="#5ab0e0" stroke="none">
+      <path d="M12 1C12 1 3 13 3 20a9 9 0 0 0 18 0C21 13 12 1 12 1z"/>
+    </svg>
+
+    <div class="mid n24" style="left:122px">45%</div>
+    <div class="mid cn dim" style="left:178px">湿度</div>
+  </div>
+
+  <!-- ═══ 空气卡 149~235 (86) ═══
+       四行：标题(14) / 数值(27) / 单位(14) / 色条行(31)
+       单位放在数值下方：并排时「HCHO ug/m3」要 69px，三列加起来超过
+       216 的卡宽，ppm 会被挤出卡片外 -->
+  <div class="card c-air">
+    <div class="abs xs" style="left:8px;  top:0">TVOC</div>
+    <div class="abs xs" style="left:74px; top:0">HCHO</div>
+    <div class="abs xs" style="left:140px;top:0">eCO2</div>
+
+    <div class="abs n24" style="left:8px;  top:14px">533</div>
+    <div class="abs n24" style="left:74px; top:14px">83</div>
+    <div class="abs n24" style="left:140px;top:14px">933</div>
+
+    <div class="abs xs" style="left:8px;  top:41px">ug/m3</div>
+    <div class="abs xs" style="left:74px; top:41px">ug/m3</div>
+    <div class="abs xs" style="left:140px;top:41px">ppm</div>
+
+    <div class="abs seg on" style="left:8px;   top:66px"></div>
+    <div class="abs seg on" style="left:20px;  top:66px"></div>
+    <div class="abs seg on" style="left:32px;  top:66px"></div>
+    <div class="abs seg on" style="left:44px;  top:66px"></div>
+    <div class="abs seg on" style="left:56px;  top:66px"></div>
+    <div class="abs seg on" style="left:68px;  top:66px"></div>
+    <div class="abs seg on" style="left:80px;  top:66px"></div>
+    <div class="abs seg"    style="left:92px;  top:66px"></div>
+    <div class="abs seg"    style="left:104px; top:66px"></div>
+    <div class="abs seg"    style="left:116px; top:66px"></div>
+
+    <div class="abs cn" style="left:136px;top:55px;color:#ffb648">轻度污染</div>
+  </div>
+
+  <!-- ═══ 天气卡 239~282 (43) ═══
+       图标坐标 = ui_theme.c:ui_icon_weather() 的 block() 坐标 + 容器 (8,7)；
+       这里画的是「多云」= UI_WX_PARTLY（太阳 13px + 云），改那边记得同步这里。 -->
+  <div class="card c-wx">
+    <div style="position:absolute;left:27px;top:7px; width:13px;height:13px;border-radius:50%;background:#ffd166"></div>
+    <div style="position:absolute;left:10px;top:17px;width:17px;height:13px;border-radius:50%;background:#cfe0ef"></div>
+    <div style="position:absolute;left:16px;top:11px;width:17px;height:17px;border-radius:50%;background:#cfe0ef"></div>
+    <div style="position:absolute;left:24px;top:16px;width:14px;height:13px;border-radius:50%;background:#cfe0ef"></div>
+    <div style="position:absolute;left:12px;top:23px;width:22px;height:6px;border-radius:3px;background:#cfe0ef"></div>
+
+    <div class="mid cn" style="left:42px">多云</div>
+    <div class="mid n24" style="left:76px">25</div>
+    <div class="mid cn" style="left:110px">°C</div>
+
+    <div class="mid cn" style="right:8px">18~27°C</div>
+  </div>
+
+  <!-- ═══ 底栏 286~320 (34) ═══
+       07:00 用 20px（LVGL 的 montserrat_20）：24px 时这一串占 69px，
+       右边的 ON 徽标和「SNTP 已同步」就放不下、会挤到卡外 -->
+  <div class="card c-bar">
+    <svg style="position:absolute;left:6px;top:11px" width="12" height="13" viewBox="0 0 24 24"
+         fill="#ffffff" stroke="none">
+      <path d="M12 2a6 6 0 0 0-6 6v5l-2 3h16l-2-3V8a6 6 0 0 0-6-6z"/>
+      <circle cx="12" cy="20" r="2"/>
+    </svg>
+
+    <div class="mid n20" style="left:20px">07:00</div>
+
+    <div class="badge" style="left:80px;top:9px"><span>ON</span></div>
+
+    <div class="divider" style="left:106px;top:2px;width:1px;height:30px"></div>
+
+    <svg style="position:absolute;left:114px;top:11px" width="12" height="11" viewBox="0 0 24 24"
+         fill="none" stroke="#4cc38a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 13l6 6L20 5"/>
+    </svg>
+
+    <div class="mid xs" style="left:128px;line-height:34px;color:#ffffff">SNTP</div>
+    <div class="mid cn" style="left:161px">已同步</div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="hint">
+  按 <b>G</b> 切换坐标网格 · 中文字体按 LVGL 实测行高 <b>31px</b> 排版 · 240×320 原尺寸<br>
+  坐标与 <b>screen_home.c</b> 一一对应，已通过 <b>ui/layout_check.py</b> 几何校验（无越界 / 无重叠）
+</div>
+
+<script>
+const Y_BLOCKS = [
+  [0,'状态栏 0'],[20,'20'],[16,'时间 16'],[68,'68 日期'],[99,'99'],
+  [103,'103 温湿度'],[145,'145'],[149,'149 空气'],[235,'235'],
+  [239,'239 天气'],[282,'282'],[286,'286 底栏'],[320,'320'],
+];
+const g = document.getElementById('grid');
+Y_BLOCKS.forEach(([y, label]) => {
+  const h = document.createElement('div');
+  h.className = 'h'; h.style.top = y + 'px'; g.appendChild(h);
+  const t = document.createElement('div');
+  t.className = 'tag'; t.style.top = (y + 1) + 'px'; t.style.left = '2px';
+  t.textContent = label; g.appendChild(t);
+});
+[0, 12, 228, 240].forEach(x => {
+  const l = document.createElement('div');
+  l.className = 'l'; l.style.left = x + 'px'; g.appendChild(l);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'g' || e.key === 'G') g.classList.toggle('on');
+});
+</script>
+</body>
+</html>

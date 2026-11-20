@@ -16,7 +16,6 @@
  */
 
 #include "lvgl.h"
-#include "screen_chat.h"
 #include "screen_home.h"
 #include "ui_theme.h"
 
@@ -38,43 +37,12 @@
 
 static const char *TAG = "LCD_UI";
 
-/* ══════════════════════════════════════════════════════════════════
- * 3.0 引脚（外接屏排针 2.54mm 1×8P，H1.3~H1.8）
- *
- *   H1.1/H1.2 = VCC/GND     （按模块要求 3.3V，勿接 5V）
- *   H1.3 SCL  → 时钟        （本工程 GPIO12）
- *   H1.4 SDA  → 数据        （本工程 GPIO13）
- *   H1.5 RES  → 复位        （本工程 GPIO14）
- *   H1.6 DC   → 命令/数据  （本工程 GPIO15）
- *   H1.7 CS   → 片选        （本工程 GPIO16）
- *   H1.8 BLK  → 背光        （本工程 GPIO17）
- *    RGB565 一帧 150KB，400kHz I2C 要 ~3 秒/帧，做不了这个 UI —— 这块屏走 SPI。
- */
-/* ⚠ 移植说明（AI-Safety-Inspection → Smart-Env-Monitor）
- * 原板 LCD 用 GPIO9~14；本工程 GPIO10/11 已被 I2C（OLED）占用
- * （见 components/BSP/I2C/iic.h: SDA=11/SCL=10），所以这里改到 GPIO12~17。
- * 全部用 #ifndef 包住：换板/换线时可以在 CMakeLists 里
- *   add_compile_definitions(LCD_PIN_SCL=GPIO_NUM_x ...)
- * 覆盖，不必改这个文件。 */
-#ifndef LCD_PIN_SCL
-#define LCD_PIN_SCL     GPIO_NUM_12     /* 同时也是 SPI SCLK */
-#endif
-#ifndef LCD_PIN_SDA
-#define LCD_PIN_SDA     GPIO_NUM_13     /* 同时也是 SPI MOSI */
-#endif
-#ifndef LCD_PIN_RST
-#define LCD_PIN_RST     GPIO_NUM_14
-#endif
-#ifndef LCD_PIN_DC
-#define LCD_PIN_DC      GPIO_NUM_15
-#endif
-#ifndef LCD_PIN_CS
-#define LCD_PIN_CS      GPIO_NUM_16
-#endif
-#ifndef LCD_PIN_BLK
-#define LCD_PIN_BLK     GPIO_NUM_17
-#endif
-
+#define LCD_PIN_SCL     GPIO_NUM_9      /* 同时也是 SPI SCLK */
+#define LCD_PIN_SDA     GPIO_NUM_10     /* 同时也是 SPI MOSI */
+#define LCD_PIN_RST     GPIO_NUM_11
+#define LCD_PIN_DC      GPIO_NUM_12
+#define LCD_PIN_CS      GPIO_NUM_13
+#define LCD_PIN_BLK     GPIO_NUM_14
 #ifndef LCD_SPI_HOST
 #define LCD_SPI_HOST    SPI2_HOST
 #endif
@@ -121,39 +89,7 @@ static volatile uint32_t         s_loop_count;    /* lcd_ui 任务循环次数�
 static TaskHandle_t              s_lcd_task;      /* 供别的任务偷拍状态 */
 static bool                      s_warned_no_timer;
 
-/* ── 对话文本的跨任务交接 ─────────────────────────────────────────
- * 文本长度不定，影子变量那套（单变量覆盖写）不适用，改用一个小队列。
- * 队列是 FreeRTOS 对象 → 只能内部 RAM：8 槽 × 201B ≈ 1.6KB，可接受。*/
-#define LCD_CHAT_QUEUE_LEN   8
-typedef struct {
-    uint8_t role;
-    char    text[SCREEN_CHAT_TEXT_MAX];
-} lcd_chat_msg_t;
-
-static QueueHandle_t  s_chat_q;
-static volatile bool  s_chat_show_req;
-static volatile bool  s_chat_clear_req;
-
 static void font_selfcheck(void);   /* 定义在下方"对外接口"区之前 */
-
-/** 按 UTF-8 字符边界截断拷贝：截半个字会让 LVGL 渲染出乱码 */
-static void utf8_copy_trunc(char *dst, size_t cap, const char *src)
-{
-    size_t o = 0;
-    const uint8_t *p = (const uint8_t *)src;
-    while (*p != 0) {
-        size_t len = (*p < 0x80) ? 1 : ((*p & 0xE0) == 0xC0) ? 2
-                   : ((*p & 0xF0) == 0xE0) ? 3 : 4;
-        if (o + len + 1 > cap) {
-            break;
-        }
-        for (size_t i = 0; i < len; i++) {
-            dst[o++] = (char)p[i];
-        }
-        p += len;
-    }
-    dst[o] = 0;
-}
 
 /* ── 跨线程影子变量（README.md 3.5：只写不读，谁最后写谁生效）───── */
 static volatile lcd_status_t  s_status_req  = LCD_STATUS_STANDBY;
@@ -350,10 +286,9 @@ static esp_err_t lvgl_port_init(void)
     setenv("TZ", "CST-8", 1);
     tzset();
 
-    ui_theme_init();        /* 换 basic 主题：无补间、无阴影 */
+    ui_theme_init();        /* 换 basic 主题：无补间、无默认阴影 */
     lvgl_tick_start();      /* tick 必须在建屏前跑起来，否则动画/长按失效 */
-    screen_home_create();   /* 主屏 · 守护（lv_scr_load 在内部） */
-    screen_chat_create();   /* 对话屏：提前建好，切屏就是 lv_scr_load */
+    screen_home_create();   /* 主屏 · 环境监测仪表盘（lv_scr_load 在内部） */
 
     /* 内部 RAM 余量：这一行是以后调 LV_MEM_* 配置的依据，别删。
      * （LV_MEM_CUSTOM 以后 lv_mem_monitor 变成空函数，所以这里数的是
@@ -414,9 +349,9 @@ static esp_err_t panel_bringup(void)
 static void font_selfcheck(void)
 {
 #if !LV_USE_FONT_COMPRESSED
-    const lv_font_t *fonts[] = { &ui_font_cn_12, &ui_font_cn_16, &ui_font_cn_20 };
-    static const char *names[] = { "ui_font_cn_12", "ui_font_cn_16", "ui_font_cn_20" };
-    for (int i = 0; i < 3; i++) {
+    const lv_font_t *fonts[] = { &ui_font_cn_12, &ui_font_cn_16 };
+    static const char *names[] = { "ui_font_cn_12", "ui_font_cn_16" };
+    for (int i = 0; i < 2; i++) {
         const lv_font_fmt_txt_dsc_t *fd = (const lv_font_fmt_txt_dsc_t *)fonts[i]->dsc;
         if (fd != NULL && fd->bitmap_format != LV_FONT_FMT_TXT_PLAIN) {
             ESP_LOGE(TAG, "%s 是压缩位图(format=%d)，但 LV_USE_FONT_COMPRESSED 没开"
@@ -476,15 +411,6 @@ void lcd_ui_init(void)
         ESP_LOGE(TAG, "panel bringup failed: %s -> 屏幕不会亮，查排线/供电/引脚",
                  esp_err_to_name(err));
         return;
-    }
-
-    /* ── 4.5 对话文本队列（必须在任何 lcd_ui_chat_* 调用之前存在）── */
-    if (s_chat_q == NULL) {
-        s_chat_q = xQueueCreate(LCD_CHAT_QUEUE_LEN, sizeof(lcd_chat_msg_t));
-        if (s_chat_q == NULL) {
-            ESP_LOGE(TAG, "chat queue create failed (%d B) -> 对话文字不上屏",
-                     (int)(LCD_CHAT_QUEUE_LEN * sizeof(lcd_chat_msg_t)));
-        }
     }
 
     /* ── 5~6. LVGL 引擎 + 主屏 ── */
@@ -575,21 +501,6 @@ void lcd_ui_task(void *arg)
         ui_consume_state();                     /* ① 影子变量 → 控件 */
         clock_tick();                           /* ①a 状态栏时钟 */
 
-        /* ①b 对话文本 / 切屏 / 清空（都来自别的任务） */
-        if (s_chat_clear_req) {
-            s_chat_clear_req = false;
-            screen_chat_clear();
-        }
-        if (s_chat_show_req) {
-            s_chat_show_req = false;
-            screen_chat_show();
-        }
-        if (s_chat_q != NULL) {
-            lcd_chat_msg_t m;
-            while (xQueueReceive(s_chat_q, &m, 0) == pdTRUE) {
-                screen_chat_add((lcd_chat_role_t)m.role, m.text);
-            }
-        }
         uint32_t idle_ms = lv_timer_handler();  /* ② 渲染 + 自动 flush */
 
         /* 每 5 秒一行体检日志。**为什么需要**：面板初始化发生在开机
@@ -660,27 +571,4 @@ void lcd_ui_set_emotion(lcd_emotion_t emo)
         s_dirty = true;
         ESP_LOGI(TAG, "emotion -> %s", emotion_name(emo));
     }
-}
-
-void lcd_ui_chat_add(lcd_chat_role_t role, const char *text)
-{
-    if (s_chat_q == NULL || text == NULL || text[0] == '\0') {
-        return;
-    }
-    lcd_chat_msg_t m;
-    m.role = (uint8_t)role;
-    utf8_copy_trunc(m.text, sizeof(m.text), text);
-    if (xQueueSend(s_chat_q, &m, 0) != pdTRUE) {
-        ESP_LOGW(TAG, "chat queue full, drop %u bytes", (unsigned)strlen(text));
-    }
-}
-
-void lcd_ui_chat_show(void)
-{
-    s_chat_show_req = true;
-}
-
-void lcd_ui_chat_clear(void)
-{
-    s_chat_clear_req = true;
 }

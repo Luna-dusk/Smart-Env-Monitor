@@ -14,7 +14,4 @@ dependencies:
   #   # `public` flag doesn't have an effect dependencies of the `main` component.
   #   # All dependencies of `main` are public by default.
   #   public: true
-  espressif/openai: ^1.1.0
-  espressif/mdns: ^1.11.1
-  nixy4/u8g2: ">=0.1.4"
-  lvgl/lvgl: "~8.3.0"      # LCD/lcd_ui.c 的移植层（ST7789 + LVGL 8.3）
+  lvgl/lvgl: "~8.3.0"     

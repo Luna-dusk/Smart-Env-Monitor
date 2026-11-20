@@ -1,9 +1,7 @@
 #include "wifi.h"
 #include "wifi_provision.h"
 #include "esp_timer.h"
-#include "lwip/sockets.h"
 #include <string.h>
-#include <fcntl.h>
 
 static EventGroupHandle_t wifi_event_group;
 const static char *TAG="wifi";
@@ -11,8 +9,6 @@ const static char *TAG="wifi";
 static uint8_t retry_num = 0;          /* 退避步数：第 n 次断连等约 2^n 秒，封顶 30s */
 static bool s_sta_configured = false;  /* STA 是否已有凭证配置（事件回调据此决定是否重连）*/
 static esp_timer_handle_t s_retry_timer = NULL;
-
-static void net_diag_task(void *arg);   /* 首次联网诊断任务，定义在文件尾 */
 
 /**
  * @brief  退避定时器回调：到点重连（STA 有配置且尚未连上才动手）
@@ -97,15 +93,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         xEventGroupSetBits(wifi_event_group, WIFI_CONNECTED_BIT);
         esp_wifi_set_ps(WIFI_PS_NONE);   /* 关省电，减少延迟 */
         wifi_provision_notify_connected();
-
-        /* 首次联网跑一次连通性诊断（"连上网但出不去"时定位卡在哪一跳） */
-        static bool diag_done = false;
-        if (!diag_done) {
-            diag_done = true;
-            if (xTaskCreate(net_diag_task, "net_diag", 4096, NULL, 5, NULL) != pdPASS) {
-                ESP_LOGE(TAG, "create net_diag task failed");
-            }
-        }
     }
 }
 
@@ -274,79 +261,6 @@ esp_err_t wifi_sta_apply_credentials(const char *ssid, const char *pass)
     }
     wifi_connect();
     return ESP_OK;
-}
-
-/* ============================ 联网连通性诊断 ============================ */
-
-#define DIAG_SERVER_IP ""   /* 与 AI_CHAT/my_client.h 的 SERVER_BASE 保持一致 */
-
-/**
- * @brief  非阻塞 TCP 探测：区分"秒拒(路由通/端口关)"与"超时(包被丢弃)"
- *
- * 网关(手机)秒拒 + 服务器超时  -> 设备到手机是通的，手机没转发客户端流量
- * 两个都超时                   -> 设备到手机链路本身不通（子网冲突/ARP 等）
- */
-static void diag_tcp_probe(const char *label, const char *ip_str, uint16_t port)
-{
-    struct sockaddr_in dst = {
-        .sin_family = AF_INET,
-        .sin_port = htons(port),
-    };
-    inet_aton(ip_str, &dst.sin_addr);
-
-    int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
-        ESP_LOGE(TAG, "[diag] %s socket 创建失败", label);
-        return;
-    }
-    fcntl(s, F_SETFL, O_NONBLOCK);
-    int r = connect(s, (struct sockaddr *)&dst, sizeof(dst));
-    if (r == 0) {
-        ESP_LOGI(TAG, "[diag] %s(%s:%u) 连接成功", label, ip_str, (unsigned)port);
-    } else {
-        fd_set wset;
-        FD_ZERO(&wset);
-        FD_SET(s, &wset);
-        struct timeval tv = { .tv_sec = 4, .tv_usec = 0 };
-        if (select(s + 1, NULL, &wset, NULL, &tv) > 0) {
-            int so_err = 0;
-            socklen_t elen = sizeof(so_err);
-            getsockopt(s, SOL_SOCKET, SO_ERROR, &so_err, &elen);
-            if (so_err == 0) {
-                ESP_LOGI(TAG, "[diag] %s(%s:%u) 连接成功", label, ip_str, (unsigned)port);
-            } else {
-                ESP_LOGW(TAG, "[diag] %s(%s:%u) 拒绝/不可达 errno=%d（路由通，端口没开或被拒）",
-                         label, ip_str, (unsigned)port, so_err);
-            }
-        } else {
-            ESP_LOGW(TAG, "[diag] %s(%s:%u) 4s 超时（包被静默丢弃）", label, ip_str, (unsigned)port);
-        }
-    }
-    close(s);
-}
-
-/**
- * @brief  首次联网后自动跑一次：打印 ip/掩码/网关，探测网关与 AI 服务器
- */
-static void net_diag_task(void *arg)
-{
-    (void)arg;
-    vTaskDelay(pdMS_TO_TICKS(2000));   /* 等 DHCP 路由稳定 */
-
-    esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-    esp_netif_ip_info_t info = { 0 };
-    if (sta != NULL && esp_netif_get_ip_info(sta, &info) == ESP_OK) {
-        ESP_LOGI(TAG, "[diag] ip=" IPSTR " mask=" IPSTR " gw=" IPSTR,
-                 IP2STR(&info.ip), IP2STR(&info.netmask), IP2STR(&info.gw));
-        char gw_str[16];
-        snprintf(gw_str, sizeof(gw_str), IPSTR, IP2STR(&info.gw));
-        diag_tcp_probe("网关(手机)", gw_str, 80);
-    } else {
-        ESP_LOGW(TAG, "[diag] 获取 STA 网络信息失败");
-    }
-    diag_tcp_probe("AI服务器", DIAG_SERVER_IP, 80);
-    ESP_LOGI(TAG, "[diag] 诊断完成");
-    vTaskDelete(NULL);
 }
 
 /**

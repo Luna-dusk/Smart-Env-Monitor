@@ -1,22 +1,6 @@
 #ifndef __LV_MEM_PSRAM_H__
 #define __LV_MEM_PSRAM_H__
 
-/**
- * @file  lv_mem_psram.h
- * @brief LVGL 内存池后端：优先 PSRAM，失败退回内部 RAM
- *
- * LVGL 默认把 `LV_MEM_SIZE` 的**静态数组**放在 `.bss`（`lv_mem.c: work_mem_int[]`），
- * 等于开机就从内部 RAM 里挖走 32KB。这块板子内部 RAM 是稀缺资源（见 HANDOFF 坑 31），
- * 所以开 `CONFIG_LV_MEM_CUSTOM` 指到这里。LVGL 的对象/样式/文本缓冲不参与 DMA，
- * 放 PSRAM 合法。
- *
- * 注意：**draw buffer 不能走这里**。它要 SPI DMA 直接读，必须留在内部 RAM，
- *   见 lcd_ui.c 的 `heap_caps_malloc(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL)`。
- *
- * 这三个函数通过根 CMakeLists.txt 的 `add_compile_definitions()` 注入成
- * `LV_MEM_CUSTOM_ALLOC / FREE / REALLOC`（要对 lvgl__lvgl 组件也生效，
- * 只能在 project() 之前做全局定义）。
- */
 
 #include <stddef.h>
 #include "esp_heap_caps.h"
@@ -39,9 +23,29 @@ static inline void lv_mem_psram_free(void *ptr)
     heap_caps_free(ptr);
 }
 
-/** realloc 失败时原指针仍然有效，所以可以安全地再试一次内部 RAM */
+/** realloc 失败时原指针仍然有效，所以可以安全地再试一次内部 RAM
+ *
+ *  ⚠ size == 0 必须单独拦下来（2026-11-19 实机崩溃的根因）：
+ *     heap_caps_realloc(ptr, 0, caps) 的语义是「free 掉 ptr，返回 NULL」
+ *     （heap_caps_base.c:191）。于是下面"失败再试一次内部 RAM"的分支
+ *     会对**同一个指针再 free 一次** —— 双重释放，tlsf 空闲链表当场损坏。
+ *     症状：几秒后任意一处 malloc 报
+ *       assert failed: block_locate_free ... (block_size(block) >= *size)
+ *     崩溃点（esp_http_client_close 里的 calloc）和真凶毫无关系。
+ *
+ *     触发路径：LVGL 的 lv_obj_remove_style() 删掉最后一个样式时会调
+ *       lv_mem_realloc(obj->styles, 0)          // lv_obj_style.c:142
+ *     而 lv_obj_remove_style_all() 会走到这里 —— basic 主题给每个
+ *     lv_obj_create 的对象挂了 2 个样式（white + scrollbar），所以本工程
+ *     ui_theme.c 里每个 glow()/block()/glass_card() 都命中一次。
+ */
 static inline void *lv_mem_psram_realloc(void *ptr, size_t size)
 {
+    if (size == 0) {
+        heap_caps_free(ptr);
+        return NULL;
+    }
+
     void *p = heap_caps_realloc(ptr, size, LV_MEM_PSRAM_CAPS);
     if (p == NULL) {
         p = heap_caps_realloc(ptr, size, LV_MEM_INTERNAL_CAPS);

@@ -1,38 +1,4 @@
 dependencies:
-  espressif/cmake_utilities:
-    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.1'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 0.5.3
-  espressif/mdns:
-    component_hash: 8bcf12e37c58c1d584aef32a02b92548124c7a3a9fcf548d3235c844a035e0f0
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.11.1
-  espressif/openai:
-    component_hash: b4a7b9765e943ab54d27b643ebf13385fe5a07cd369f04513ef37beb8d510524
-    dependencies:
-    - name: espressif/cmake_utilities
-      registry_url: https://components.espressif.com
-      require: private
-      version: 0.*
-    - name: idf
-      require: private
-      version: '>=4.4.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.1.0
   idf:
     source:
       type: idf
@@ -44,22 +10,9 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 8.3.11
-  nixy4/u8g2:
-    component_hash: d23326bf33da6b0a41ef16caa527689d770bcb7c469d8d57ca18a42f4cfed81b
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 0.1.4
 direct_dependencies:
-- espressif/mdns
-- espressif/openai
 - idf
 - lvgl/lvgl
-- nixy4/u8g2
-manifest_hash: c91e94051bbca2dff69d3277a1d7fe67932fd9860354923c4390730f75f7e4c3
+manifest_hash: 0cb30bcc1d96fe59914be7e59d66cb9967431b1cd64ba7e0c6a1a063dc539073
 target: esp32s3
 version: 2.0.0

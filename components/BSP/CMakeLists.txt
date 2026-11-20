@@ -1,30 +1,32 @@
 set(src_dirs
                 "LED_Driver"
-                "I2C"
-                "OLED"
-                "UART"
                 "WIFI"
-                "LCD")
+                "LCD"
+                "ALARM"          # buzzer.c 无源蜂鸣器（LEDC PWM）
+                "App_sensors")   # tvoc301.c 空气质量传感器（UART2）
 
 set(include_dirs
                 "LED_Driver"
-                "I2C"
-                "OLED"
-                "UART"
                 "WIFI"
-                "LCD")
+                "LCD"
+                "ALARM"
+                "App_sensors")
 
 set(requires
                 driver
                 esp_driver_gpio
-                esp_driver_i2c
                 esp_driver_spi
-                nixy4__u8g2          # OLED 驱动（I2C/iic.h、OLED/oled.c 直接 include u8g2.h）
+                esp_driver_uart     # TVOC-301 串口（App_sensors/tvoc301.c）
+                esp_driver_ledc     # 蜂鸣器 PWM（ALARM/buzzer.c）
                 nvs_flash
                 esp_netif
                 esp_wifi
                 esp_event
+                log
                 esp_http_server      # 配网门户 httpd（WIFI/wifi_provision.c）
+                esp_http_client      # 天气客户端（WIFI/weather.c）
+                json                 # cJSON：解析和风天气响应
+                mbedtls              # esp_crt_bundle_attach：HTTPS 根证书包
                 lwip                 # wifi.c 联网诊断的 socket/select
                 esp_timer
                 esp_lcd              # ST7789 SPI 面板驱动（LCD/lcd_ui.c）
